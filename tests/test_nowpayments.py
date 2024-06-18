@@ -441,7 +441,7 @@ def test_get_list_of_payments_sort_paras_error(
         now_payments_email_password.list_of_payments(sort_by="invalid_sort_parameter")
 
 
-def test_get_list_of_payments_sort_paras_error(
+def test_get_list_of_payments_order_paras_error(
     now_payments_email_password: NOWPaymentsAPI,
 ) -> None:
     with pytest.raises(NowPaymentsException, match="Invalid order parameter"):
