@@ -3,8 +3,8 @@ A Python wrapper for the NOWPayments API.
 """
 from datetime import datetime
 from typing import Any, Dict, Union
-import requests
-from requests import HTTPError
+import httpx
+from httpx import HTTPError
 
 from .models.payment import PaymentData, InvoicePaymentData, InvoiceData
 
@@ -42,22 +42,28 @@ class NOWPaymentsAPI:
         self._email = email
         self._password = password
         self.sandbox = sandbox
-        self.session = requests.Session()
+
+    async def __aenter__(self):
+        self.client = httpx.AsyncClient()
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, exc_tb):
+        await self.client.aclose()
 
     # -------------------------------
     # Request Session Method Wrappers
     # -------------------------------
-    def _get_request(self, endpoint: str, bearer: str = None) -> Dict:
+    async def _get_request(self, endpoint: str, bearer: str = None) -> Dict:
         uri = f"{self.api_uri}{endpoint}"
         headers = {"x-api-key": self._api_key}
         if bearer:
             headers["Authorization"] = f"Bearer {bearer}"
-        response = self.session.get(url=uri, headers=headers)
-        if response.ok:
+        response = await self.client.get(url=uri, headers=headers)
+        if response.is_success:
             return response.json()
         raise HTTPError(response.json().get("message"))
 
-    def _post_requests(self, endpoint: str, data: Dict = None) -> Dict:
+    async def _post_requests(self, endpoint: str, data: Dict = None) -> Dict:
         """
         Make get requests with your header and data
 
@@ -66,20 +72,20 @@ class NOWPaymentsAPI:
         """
         uri = f"{self.api_uri}{endpoint}"
         headers = {"x-api-key": self._api_key}
-        response = self.session.post(url=uri, headers=headers, data=data)
+        response = await self.client.post(url=uri, headers=headers, json=data)
         response.raise_for_status()
         return response.json()
 
     # -------------------------
     # Auth an API Status
     # -------------------------
-    def status(self) -> Dict:
+    async def status(self) -> Dict:
         """This is a method to get information about the current state of the API. If everything is OK, you will receive
         an "OK" message. Otherwise, you'll see some error.
         """
-        return self._get_request("status")
+        return await self._get_request("status")
 
-    def auth(self) -> Dict:
+    async def auth(self) -> Dict:
         """Authentication method for obtaining a JWT token. You should specify your email and password which you are
         using for signing in into dashboard. JWT token will be required for creating a payout request. For security
         reasons, JWT tokens expire in 5 minutes.
@@ -91,14 +97,14 @@ class NOWPaymentsAPI:
         """
         if not self._email or not self._password:
             raise NowPaymentsException("Email and password are missing")
-        return self._post_requests(
+        return await self._post_requests(
             "auth", {"email": self._email, "password": self._password}
         )
 
     # -------------------------
     # Payments
     # -------------------------
-    def create_payment(
+    async def create_payment(
         self,
         price_amount: float,
         price_currency: str,
@@ -153,7 +159,7 @@ class NOWPaymentsAPI:
             raise NowPaymentsException("Amount must be greater than 0")
         if price_currency not in AVAILABLE_FIAT:
             raise NowPaymentsException("Unsupported fiat currency")
-        if pay_currency not in self.currencies()["currencies"]:
+        if pay_currency not in (await self.currencies())["currencies"]:
             raise NowPaymentsException("Unsupported cryptocurrency")
 
         payload = PaymentData(
@@ -162,9 +168,9 @@ class NOWPaymentsAPI:
             pay_currency=pay_currency,
             **kwargs,
         )
-        return self._post_requests("payment", data=payload.clean_data_to_dict())
+        return await self._post_requests("payment", data=payload.clean_data_to_dict())
 
-    def create_invoice(
+    async def create_invoice(
         self,
         price_amount: float,
         price_currency: str,
@@ -206,7 +212,7 @@ class NOWPaymentsAPI:
             raise NowPaymentsException("Amount must be greater than 0")
         if price_currency not in AVAILABLE_FIAT:
             raise NowPaymentsException("Unsupported fiat currency")
-        if pay_currency not in self.currencies()["currencies"]:
+        if pay_currency not in (await self.currencies())["currencies"]:
             raise NowPaymentsException("Unsupported cryptocurrency")
         payload = InvoiceData(
             price_amount=price_amount,
@@ -214,9 +220,9 @@ class NOWPaymentsAPI:
             pay_currency=pay_currency,
             **kwargs,
         )
-        return self._post_requests("invoice", data=payload.clean_data_to_dict())
+        return await self._post_requests("invoice", data=payload.clean_data_to_dict())
 
-    def create_payment_by_invoice(
+    async def create_payment_by_invoice(
         self, invoice_id: int, pay_currency: str, **kwargs: Union[str, str, int, str]
     ) -> Dict:
         """Creates payment by invoice. With this method, your customer will be able to complete the payment without leaving your website.
@@ -261,17 +267,17 @@ class NOWPaymentsAPI:
           "burning_percent": null,
           "expiration_estimate_date": "2020-12-23T15:00:22.742Z"
         }"""
-        if pay_currency not in self.currencies()["currencies"]:
+        if pay_currency not in (await self.currencies())["currencies"]:
             raise NowPaymentsException("Unsupported cryptocurrency")
         data = InvoicePaymentData(iid=invoice_id, pay_currency=pay_currency, **kwargs)
-        response = self._post_requests(
+        response = await self._post_requests(
             "invoice-payment", data=data.clean_data_to_dict()
         )
         uri = f"{self.web_payment_uri}?iid={invoice_id}&paymentId={response['payment_id']}"
         response["uri"] = uri
         return response
 
-    def minimum_payment_amount(
+    async def minimum_payment_amount(
         self, currency_from: str, currency_to: str, **kwargs
     ) -> Any:
         """
@@ -307,9 +313,9 @@ class NOWPaymentsAPI:
             and type(kwargs["is_fee_paid_by_user"]) is bool
         ):
             endpoint += f"&is_fixed_rate={kwargs['is_fee_paid_by_user']}"
-        return self._get_request(endpoint)
+        return await self._get_request(endpoint)
 
-    def update_payment_estimate(self, payment_id: int) -> Dict:
+    async def update_payment_estimate(self, payment_id: int) -> Dict:
         """
         This endpoint is required to get the current estimate on the payment and update the current estimate. Please
         note! Calling this estimate before expiration_estimate_date will return the current estimate, it won’t be
@@ -320,9 +326,9 @@ class NOWPaymentsAPI:
         """
         if payment_id <= 0:
             raise NowPaymentsException("Payment ID should be greater than zero")
-        return self._post_requests(f"payment/{payment_id}/update-merchant-estimate")
+        return await self._post_requests(f"payment/{payment_id}/update-merchant-estimate")
 
-    def estimate_price(
+    async def estimate_price(
         self, amount: float, currency_from: str, currency_to: str
     ) -> Dict:
         """
@@ -338,13 +344,13 @@ class NOWPaymentsAPI:
             raise NowPaymentsException("Amount must be greater than 0")
         if currency_from not in AVAILABLE_FIAT:
             raise NowPaymentsException("Unsupported fiat currency")
-        if currency_to not in self.currencies()["currencies"]:
+        if currency_to not in (await self.currencies())["currencies"]:
             raise NowPaymentsException("Unsupported cryptocurrency")
 
         endpoint = f"estimate?amount={amount}&currency_from={currency_from}&currency_to={currency_to}"
-        return self._get_request(endpoint)
+        return await self._get_request(endpoint)
 
-    def payment_status(self, payment_id: int) -> Dict:
+    async def payment_status(self, payment_id: int) -> Dict:
         """
         Get the actual information about the payment.
 
@@ -352,9 +358,9 @@ class NOWPaymentsAPI:
         """
         if payment_id <= 0:
             raise NowPaymentsException("Payment ID should be greater than zero")
-        return self._get_request(f"payment/{payment_id}")
+        return await self._get_request(f"payment/{payment_id}")
 
-    def list_of_payments(
+    async def list_of_payments(
         self,
         limit: int = 10,
         page: int = 0,
@@ -409,26 +415,26 @@ class NOWPaymentsAPI:
 
         endpoint = f"payment?limit={limit}&page={page}&sortBy={sort_by}&orderBy={order_by}&{period}"
 
-        bearer = self.auth()["token"]
-        return self._get_request(endpoint, bearer=bearer)
+        bearer = (await self.auth())["token"]
+        return await self._get_request(endpoint, bearer=bearer)
 
     # -------------------------
     # Currencies
     # -------------------------
-    def currencies(self, fixed_rate: bool = True) -> Dict:
+    async def currencies(self, fixed_rate: bool = True) -> Dict:
         """This is a method for obtaining information about all cryptocurrencies available for payments for your current
         setup of payout wallets.
 
         :param boolean fixed_rate: Returns available currencies with minimum and maximum amount of the exchange.
         """
-        return self._get_request(f"currencies?fixed_rate={fixed_rate}")
+        return await self._get_request(f"currencies?fixed_rate={fixed_rate}")
 
-    def currencies_full(self) -> Dict:
+    async def currencies_full(self) -> Dict:
         """This is a method to obtain detailed information about all cryptocurrencies available for payments."""
-        return self._get_request(f"full-currencies")
+        return await self._get_request(f"full-currencies")
 
-    def currencies_checked(self) -> Dict:
+    async def currencies_checked(self) -> Dict:
         """This is a method for obtaining information about the cryptocurrencies available for payments. Shows the coins
         you set as available for payments in the "coins settings" tab on your personal account.
         """
-        return self._get_request("merchant/coins")
+        return await self._get_request("merchant/coins")
