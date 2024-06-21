@@ -116,12 +116,10 @@ class NOWPaymentsAPI:
         :param str ipn_callback_url: Url to receive callbacks, should contain "http" or "https".
         :param str order_id: Inner store order ID.
         :param str order_description: Inner store order description.
-        :param int purchase_id: id of purchase for which you want to create other payment,
-            only used for several payments for one order
         :param str payout_address: Receive funds on another address.
         :param str payout_currency: Currency of your external payout_address.
         :param int payout_extra_id: Extra id or memo or tag for external payout_address.
-        :param bool fixed_rate: Required for fixed-rate exchanges.
+        :param bool is_fixed_rate: Required for fixed-rate exchanges.
         :param bool is_fee_paid_by_user: Required for fixed-rate exchanges with all fees paid by users.
 
         :return: dict

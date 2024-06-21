@@ -157,11 +157,10 @@ def test_create_payment_with_optional_paras(
         ipn_callback_url="https://example.org",
         order_id="Order_123456789",
         order_description="Roland TR-8S",
-        # purchase_id= "", # I do not understand official documentation
         # payout_address="d8dA6BF26964aF9D7eEd9e03E53415D37aA96045",  # This always returns 400
         # payout_currency="eth",  # Returns 500 probably related to the 'payout_address'
         # payout_extra_id=0xbeef, # Returns same error as payout_currency
-        fixed_rate=True,
+        is_fixed_rate=True,
         is_fee_paid_by_user=True,
     )
     assert "payment_id" in response
