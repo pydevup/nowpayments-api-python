@@ -169,11 +169,10 @@ async def test_create_payment_with_optional_paras(
         ipn_callback_url="https://example.org",
         order_id="Order_123456789",
         order_description="Roland TR-8S",
-        # purchase_id= "", # I do not understand official documentation
         # payout_address="d8dA6BF26964aF9D7eEd9e03E53415D37aA96045",  # This always returns 400
         # payout_currency="eth",  # Returns 500 probably related to the 'payout_address'
         # payout_extra_id=0xbeef, # Returns same error as payout_currency
-        fixed_rate=True,
+        is_fixed_rate=True,
         is_fee_paid_by_user=True,
     )
     assert "payment_id" in response
@@ -215,21 +214,21 @@ async def test_create_payment_with_invalid_amount_error(
     now_payments_api_key: NOWPaymentsAPI,
 ) -> None:
     with pytest.raises(NowPaymentsException, match="Amount must be greater than 0"):
-        await now_payments_api_key.estimate_price(0, "usd", "btc")
+        await now_payments_api_key.create_payment(0, "usd", "btc")
 
 
 async def test_create_payment_with_unsupported_fiat_currency_error(
     now_payments_api_key: NOWPaymentsAPI,
 ) -> None:
     with pytest.raises(NowPaymentsException, match="Unsupported fiat currency"):
-        await now_payments_api_key.estimate_price(1, "ustr", "btc")
+        await now_payments_api_key.create_payment(1, "ustr", "btc")
 
 
 async def test_create_payment_with_unsupported_cryptocurrency_error(
     now_payments_api_key: NOWPaymentsAPI,
 ) -> None:
     with pytest.raises(NowPaymentsException, match="Unsupported cryptocurrency"):
-        await now_payments_api_key.estimate_price(1, "usd", "btccc")
+        await now_payments_api_key.create_payment(1, "usd", "btccc")
 
 
 async def test_create_invoice(now_payments_api_key: NOWPaymentsAPI) -> None:
